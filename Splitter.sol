@@ -1,16 +1,21 @@
 pragma solidity ^0.4.10;
 
 contract Splitter {
-  address public bob;
-  address public carol;
+  address public address1;
+  address public address2;
   address public owner;
   bool public isKilled;
   
   mapping(address => uint) public splitBalance;
   
-  modifier isCreator(){
+  modifier onlyOwner(){
     require(msg.sender == owner);
     _;
+  }
+  
+  modifier onlyIfRunning(){
+      require(isKilled != true);
+      _;
   }
   
   modifier haveBalance(){
@@ -18,58 +23,53 @@ contract Splitter {
     _;
   }
 
-  event LogBalance(string name, address receiver, uint amount);
-  event LogKillContract(string message, address sender);
+  event LogSplit(address sender, address receiver1, uint amount1, address receier2, uint amount2);
+  event LogCheckBalance(address sender, uint senderBalance, uint totalBalance);
+  event LogKillContract(address sender, string message, bool status);
   
-  function Splitter(address bobAddress, address carolAddress) 
-    payable
+  function Splitter()
     public
   {
-    require(bobAddress!=address(0x0));
-    require(carolAddress!=address(0x0));
-    
     owner = msg.sender;
-    bob = bobAddress; //Receiver 1
-    carol = carolAddress; //Receiver 2
   }
   
-  function split ()
+  function split (address receiver1, address receiver2)
     public
     payable
+    onlyIfRunning()
     returns (bool)
   {
-    require(!isKilled);
+    //check if the address arguments are not empty
+    require(receiver1!=address(0x0));
+    require(receiver2!=address(0x0));
+    
+    //Check if the sender has enough funds.
     require(msg.sender.balance > msg.value);
     require(msg.value > 0);
+    
+    address1 = receiver1; //Receiver 1
+    address2 = receiver2; //Receiver 2
     
     uint part1 = msg.value/2;
     uint part2 = msg.value - part1;
     
-    splitBalance[bob] += part1;
-    splitBalance[carol] += part2;
+    splitBalance[address1] += part1;
+    splitBalance[address2] += part2;
+    
+    //LogSplit(msg.sender, address1, splitBalance[address1], address2, splitBalance[address2]);
     
     return true;
   }
+  
+  function getSplitBalance(address addr) returns(uint){
+    return splitBalance[addr];
+  }
 
-  function getAllBalances() 
-    public 
-  {
-    LogBalance("Alice", owner, owner.balance);
-    LogBalance("Bob", bob, splitBalance[bob]);
-    LogBalance("Carol", carol, splitBalance[carol]);
-  }
-  
-  function getAllWallet() 
-    public 
-  {
-    LogBalance("Alice", owner, owner.balance);
-    LogBalance("Bob", bob, bob.balance);
-    LogBalance("Carol", carol, carol.balance);
-  }
-  
+
   function withdraw()
     public
     haveBalance()
+    onlyIfRunning()
     returns(bool)
   {
       uint amount = splitBalance[msg.sender];
@@ -77,18 +77,19 @@ contract Splitter {
       
       msg.sender.transfer(amount);
       
+      LogCheckBalance(msg.sender, splitBalance[msg.sender], msg.sender.balance);
+      
       return true;
   }
   
-  function() public {}
-  
-  function killContract()
+  function killContract(bool statusContract)
     public 
-    isCreator() 
+    onlyOwner() 
   {
-    isKilled = true;
-    LogKillContract("Alice killed the contract", msg.sender);
-    selfdestruct(msg.sender);
-    
+    //initial value: false
+    isKilled = statusContract;
+    LogKillContract(msg.sender, "Owner updated the status of the contract", isKilled);
   }
+  
+  function() public {}
 }
